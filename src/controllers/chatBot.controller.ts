@@ -25,7 +25,6 @@ const sendMessage = asyncHandler(async (req: Request, res: Response) => {
       to: `whatsapp:+${req.body.whatsappNumber}`,
     });
 
-    console.log("Full Twilio response:", messageFunc);
     const message = messageFunc.sid;
     res.send(success("Successfully sent the message", message));
   } catch (err) {
@@ -58,7 +57,6 @@ const getMessage = asyncHandler(async (req: Request, res: Response) => {
       success("Successfully sent the message", "Message sent to AI chat")
     );
   } catch (error) {
-    //@ts-ignore
     res.status(500).send({ success: false, message: "Internal Server Error" });
   }
 });

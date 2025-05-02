@@ -1,13 +1,16 @@
-import { Request, Response } from "express";
+import { Request, response, Response } from "express";
 
 import { asyncHandler } from "../utils/AsyncHandler";
 import { badRequest } from "../utils/ApiError";
 import { success } from "../utils/ApiResponse";
-import { allTodoSend, todoDelete, todoSave1 } from "./todo.controller";
+import { createAccount } from "./user.controller";
+import { allTodoSend, todoDelete, todoSave } from "./todo.controller";
 const aiApi = "AIzaSyBvCHs7Hl_GKc9JhTugUVDT-ulTxNOCwV0";
 
 const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const { getQuestion, whatsappNumber } = req.body;
+  console.log("getQuestiongetQuestiongetQuestiongetQuestion", getQuestion);
+
   if (getQuestion == "") {
     res.status(400).send(badRequest("Provide Question", getQuestion));
     return;
@@ -65,38 +68,116 @@ User Question: ${getQuestion}
       }),
     });
     const data = await aiResponse.json();
-    const getAnswer = data.candidates[0].content.parts[0].text;
-    console.log("getAnswergetAnswergetAnswergetAnswer", getAnswer);
-    console.log(typeof getAnswer);
-    const responsedObj = JSON.parse(getAnswer);
 
-    let response = "";
+    const getAnswer = data.candidates[0].content.parts[0].text;
+    const jsonMatch = getAnswer.match(/{[\s\S]*}/);
+
+    if (!jsonMatch) {
+      throw new Error("No valid JSON found in the response");
+    }
+
+    const responsedObj = JSON.parse(jsonMatch[0]);
+    let response;
+    console.log("Sfkdsklfkfslfsdlkfdslkfdklsf", responsedObj);
     if (responsedObj["query"] == "1") {
-      const taskAddedFunc = todoSave1(responsedObj, whatsappNumber);
+      todoSave(responsedObj, whatsappNumber);
+      response = "Todo saved successfully";
     } else if (responsedObj["query"] == "3") {
-      console.log(responsedObj["query"]);
-      const getAllTodoFuncCall = await allTodoSend(whatsappNumber);
-      console.log("getAllTodoFuncCall", getAllTodoFuncCall);
+      response = await allTodoSend(whatsappNumber);
     } else if (responsedObj["query"] == "4") {
-      const deleteTodoFuncCall = todoDelete(
+      const deletedTodoReponse = await todoDelete(
         responsedObj["todoId"],
         whatsappNumber
       );
-      // if (deleteTodoFuncCall.statusCode == 200) {
-      //   response = "Todo deleted SuccessFully";
-      // } else {
-      //   response = "Something went wrong with the database server";
-      // }
+      console.log("ljfkdflgdgjdlkgjdfklg", deletedTodoReponse);
+      //@ts-ignore
+      if (!deletedTodoReponse?.data) {
+        console.log("dkfsfsklfdlkf222");
+        response =
+          "Something went wrong with this todo  id maybe it is not in database " +
+          responsedObj["todoId"];
+        res.status(200).send(success("Operation done successfully", response));
+        return;
+      }
+      response =
+        "Todo Deleted successfully with todoid: " + responsedObj["todoId"];
+    } else if (responsedObj["query"] == "5") {
+      response = responsedObj["response"];
     }
-    res
-      .status(200)
-      .send(success("Successfully get the answer", responsedObj["response"]));
+    res.status(200).send(success("Operation done successfully", response));
   } catch (error: any) {
     console.log(error);
     res.status(400).send(badRequest("Something went wrong", error.error));
     return;
   }
 });
+export const checkAuthAi = async (
+  getQuestion: string,
+  whatsappNumber: string
+) => {
+  console.log("getghhhhhhhhhhhhhh", getQuestion);
+  const fullQ = `
+  You are an intelligent assistant. Based on the user input, identify what the user wants and respond in one of the following structured JSON formats:
+
+  First, check if the input includes **these 3 things** 'username:' and 'password:' and 'email:'.
+  - If yes, respond with:
+    { username: <extracted username>,password: <extracted password>, email": <extracted email>, "query": "1" }
+
+  - If only one or three of above are mentioned **but it's not in a valid credential format** for login, or if the context seems like an account creation attempt, respond with:
+    { "query": "2", "response": "You are not authorized to enter credentials like this. If you want to create an account, please follow the proper procedure." }
+
+Important:
+
+- Return **only** a single JSON object based on the rule.
+- All **keys and values must be strings**, even numbers (e.g., "query": "1").
+- Do **not** include any code formatting like \`\`\`json or explanations.
+- Be concise and accurate.
+
+User prompt: ${getQuestion}
+
+`;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
+    const aiResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: fullQ,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const data = await aiResponse.json();
+    const getAnswer = data.candidates[0].content.parts[0].text;
+    const responsedObj = JSON.parse(getAnswer);
+    console.log(responsedObj);
+    let response = "";
+    if (responsedObj["query"] == "1") {
+      response = await createAccount(
+        responsedObj["username"],
+        responsedObj["password"],
+        responsedObj["email"],
+        whatsappNumber
+      );
+    } else if (responsedObj["query"] == "2") {
+      response = responsedObj["response"];
+    }
+    return response;
+  } catch (error: any) {
+    console.log(error);
+
+    return;
+  }
+};
 
 // const getAllChats = asyncHandler(async (req: Request, res: Response) => {
 //   try {

@@ -1,30 +1,34 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { User } from "../models/user.model";
-import { CreateAccountInput, LoginInput } from "../types/user.type";
+import { LoginInput } from "../types/user.type";
 
-export const createAccount = async (req: Request, res: Response) => {
-  const { username, email, password } = req.body as CreateAccountInput;
-  console.log(username);
+export const createAccount = async (
+  username: string,
+  password: string,
+  email: string,
+  whatsappNumber: string
+) => {
   try {
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      res.status(400).json({ message: "Username or email already exists" });
+      return "Username or email already exists";
     }
-    console.log(username);
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = new User({
+    const user = await User.create({
       username,
       email,
       password: hashedPassword,
+      whatsappNumber,
     });
 
-    await user.save();
-    res.status(201).json({ message: "Account created successfully" });
+    if (!user) {
+      return "Something went wrong with server";
+    }
+    return "Account created successfully";
   } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+    return `Server error ${error} `;
   }
 };
 
