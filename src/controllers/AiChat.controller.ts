@@ -77,6 +77,7 @@ User Question: ${getQuestion}
     }
 
     const responsedObj = JSON.parse(jsonMatch[0]);
+    console.log(responsedObj);
     let response;
     console.log("Sfkdsklfkfslfsdlkfdslkfdklsf", responsedObj);
     if (responsedObj["query"] == "1") {
@@ -89,10 +90,8 @@ User Question: ${getQuestion}
         responsedObj["todoId"],
         whatsappNumber
       );
-      console.log("ljfkdflgdgjdlkgjdfklg", deletedTodoReponse);
       //@ts-ignore
       if (!deletedTodoReponse?.data) {
-        console.log("dkfsfsklfdlkf222");
         response =
           "Something went wrong with this todo  id maybe it is not in database " +
           responsedObj["todoId"];
@@ -104,6 +103,7 @@ User Question: ${getQuestion}
     } else if (responsedObj["query"] == "5") {
       response = responsedObj["response"];
     }
+    console.log(response);
     res.status(200).send(success("Operation done successfully", response));
   } catch (error: any) {
     console.log(error);

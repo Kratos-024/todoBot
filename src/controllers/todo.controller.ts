@@ -18,7 +18,11 @@ const todoSave = async (todoPram: any, whatsappNumber: string) => {
 
 const allTodoSend = async (whatsappNumber: string) => {
   const todos = await Todo.find({ whatsappNumber: whatsappNumber });
-  return todos;
+  if (!todos || todos.length > 0) {
+    return todos;
+  } else {
+    return "No Todos found";
+  }
 };
 const todoDelete = async (
   taskId: string,

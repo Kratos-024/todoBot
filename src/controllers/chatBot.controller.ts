@@ -13,14 +13,22 @@ const sendMessage = asyncHandler(async (req: Request, res: Response) => {
     return res.send(badRequest("Response is empty or malformed"));
   }
 
-  const responseText = req.body.response.data;
-
+  // let responseText = JSON.stringify(req.body.response.data, null, 2);
+  let responseText = req.body.response.data;
+  let theResponseText = "";
+  if (Array.isArray(responseText)) {
+    responseText.map((ele) => {
+      theResponseText += `\nThe task: ${ele.task}, timing: ${ele.rTime}, id: ${ele._id}\n`;
+    });
+  } else {
+    theResponseText = responseText;
+  }
   try {
     const messageFunc = await client.messages.create({
       from: "whatsapp:+14155238886",
       contentSid: "HX2cc589a48c4a7edfedbb7289b11864e0",
       contentVariables: JSON.stringify({
-        "2": responseText,
+        "2": `${theResponseText}`,
       }),
       to: `whatsapp:+${req.body.whatsappNumber}`,
     });
