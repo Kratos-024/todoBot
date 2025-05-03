@@ -1,4 +1,4 @@
-import { User } from "../models/user.model";
+import { IUser, User } from "../models/user.model";
 export interface CreateAccountInput {
   username: string;
   email: string;
@@ -13,7 +13,7 @@ export interface LoginInput {
 declare global {
   namespace Express {
     interface Request {
-      user: typeof User;
+      user: IUser | null;
     }
   }
 }

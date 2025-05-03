@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { getAnswer } from "../controllers/AiChat.controller";
 import { handleAuthOrCreate, userAuth } from "../middlewares/user.auth";
+import { getAnswer } from "../controllers/AiChat.controller";
 
 const aiChatRouter = Router();
 

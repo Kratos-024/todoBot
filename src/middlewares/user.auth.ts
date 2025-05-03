@@ -29,13 +29,13 @@ export const handleAuthOrCreate = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
     const { getQuestion, whatsappNumber } = req.body;
     try {
-      const user = await User.findOne({ whatsappNumber });
-      if (!user) {
-        console.log("dkfadklfkl4344343f");
-
-        const response = await checkAuthAi(getQuestion, whatsappNumber);
+      const userExisted = await User.findOne({ whatsappNumber });
+      if (!userExisted) {
+        const response = await checkAuthAi(req, getQuestion, whatsappNumber);
         res.send(success("Account created successfully", response));
         return;
+      } else {
+        req.user = userExisted;
       }
 
       next();

@@ -4,31 +4,35 @@ import { User } from "../models/user.model";
 import { LoginInput } from "../types/user.type";
 
 export const createAccount = async (
+  req: Request,
   username: string,
   password: string,
   email: string,
   whatsappNumber: string
 ) => {
   try {
-    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    const existingUser = await User.findOne({
+      $or: [{ username }, { email }],
+    });
     if (existingUser) {
       return "Username or email already exists";
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({
+    const userCreated = await User.create({
       username,
       email,
       password: hashedPassword,
       whatsappNumber,
     });
 
-    if (!user) {
+    if (!userCreated) {
       return "Something went wrong with server";
     }
+    req.user = userCreated;
     return "Account created successfully";
   } catch (error) {
-    return `Server error ${error} `;
+    return `Server error ${error}`;
   }
 };
 

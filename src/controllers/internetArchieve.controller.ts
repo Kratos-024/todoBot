@@ -1,48 +1,76 @@
-import { Request, Response } from "express";
-import { asyncHandler } from "../utils/AsyncHandler";
 import axios from "axios";
+import fs from "fs";
+import { AiChat } from "../models/AiChat.models";
+import { Request } from "express";
+const api_key = "AIzaSyAvNUI5dmu0EwuntwXEHqmHr1rXb6OJGY0";
+const gsi = "613ba84505d114c91";
+const getPdf = async (req: Request, bookName: string) => {
+  const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(
+    bookName + " filetype:pdf"
+  )}&key=${api_key}&cx=${gsi}`;
 
-type BookInfo = {
-  author_key?: string[];
-  author_name?: string[];
-  cover_edition_key?: string;
-  cover_i?: number;
-  ebook_access?: string;
-  edition_count?: number;
-  first_publish_year?: number;
-  has_fulltext?: boolean;
-  ia?: string[];
-  ia_collection_s?: string;
-  key?: string;
-  language?: string[];
-  lending_edition_s?: string;
-  lending_identifier_s?: string;
-  public_scan_b?: boolean;
-  title?: string;
-};
-
-const getPdf = async (bookUrl: string): Promise<BookInfo | null> => {
   try {
-    const getPdfData = await axios.get(bookUrl);
-    const pdfData: BookInfo[] = getPdfData.data.docs.filter(
-      (data: BookInfo) => data.ebook_access === "public"
-    );
-    console.log(pdfData);
-    if (pdfData.length === 0) return null;
+    const response = await axios.get(url);
+    const results = response.data.items;
+    let count = 0;
+    const searchArray = results.map((item: any) => ({
+      imgSrc: item.pagemap.cse_thumbnail,
+      title: item.title,
+      link: item.link,
+      snippet: item.snippet,
+      numbered: count++,
+    }));
+    const jsonString = JSON.stringify(searchArray, null, 2);
 
-    const originalPdf = pdfData.reduce(
-      (max: BookInfo, obj: BookInfo) =>
-        (obj.edition_count ?? 0) > (max.edition_count ?? 0) ? obj : max,
-      {} as BookInfo
-    );
-    //@ts-ignore
-    const pdfUrl = `https://archive.org/download/${originalPdf.ia[0]}/${originalPdf.ia[0]}.pdf`;
+    fs.writeFileSync("output.json", jsonString);
 
-    return originalPdf;
+    const filterdSearchArray = searchArray.filter(
+      (obj: { title: string; snippet: string; link: string }) => {
+        return obj.link.toLowerCase().includes(".pdf");
+      }
+    );
+    await AiChat.findOneAndUpdate(
+      { userId: req.user?._id },
+      {
+        pdfBookData: filterdSearchArray,
+      }
+    );
+
+    let theResponseText = filterdSearchArray
+      .map((ele: any) =>
+        ele.imgSrc && ele.imgSrc[0] ? ele.imgSrc[0].src : undefined
+      )
+      .filter((src: any) => src !== undefined);
+
+    return theResponseText;
   } catch (error) {
-    console.error("Error fetching PDF data:", error);
-    return null;
+    //@ts-ignore
+    console.error("Search error:", error.response?.data || error.message);
+  }
+};
+const deletePdfData = async (userId: string) => {
+  const chatDoc = await AiChat.findOne({ userId });
+
+  if (!chatDoc) {
+    console.log("User not found");
+    return;
+  }
+
+  chatDoc.pdfBookData = [];
+  await chatDoc.save();
+};
+const trimChatHistory = async (userId: string) => {
+  const chatDoc = await AiChat.findOne({ userId });
+
+  if (!chatDoc) {
+    console.log("User not found");
+    return;
+  }
+
+  if (chatDoc.chatHistory.length > 20) {
+    chatDoc.chatHistory = chatDoc.chatHistory.slice(5); // Remove the first 5 items to keep only the latest 15
+    await chatDoc.save();
   }
 };
 
-export default getPdf;
+export { getPdf, deletePdfData, trimChatHistory };

@@ -13,25 +13,50 @@ const sendMessage = asyncHandler(async (req: Request, res: Response) => {
     return res.send(badRequest("Response is empty or malformed"));
   }
 
-  // let responseText = JSON.stringify(req.body.response.data, null, 2);
   let responseText = req.body.response.data;
-  let theResponseText = "";
-  if (Array.isArray(responseText)) {
+  let theResponseText: string | any[] = "";
+  if (Array.isArray(responseText) && responseText[0].task) {
     responseText.map((ele) => {
       theResponseText += `\nThe task: ${ele.task}, timing: ${ele.rTime}, id: ${ele._id}\n`;
     });
   } else {
     theResponseText = responseText;
   }
+
   try {
-    const messageFunc = await client.messages.create({
-      from: "whatsapp:+14155238886",
-      contentSid: "HX2cc589a48c4a7edfedbb7289b11864e0",
-      contentVariables: JSON.stringify({
-        "2": `${theResponseText}`,
-      }),
-      to: `whatsapp:+${req.body.whatsappNumber}`,
-    });
+    let messageFunc;
+    if (
+      theResponseText &&
+      theResponseText.length &&
+      theResponseText[0].startsWith("http")
+    ) {
+      messageFunc = await client.messages.create({
+        from: "whatsapp:+14155238886",
+        to: `whatsapp:+${req.body.whatsappNumber}`,
+        body: "Here are the book results:",
+        mediaUrl: theResponseText,
+      });
+    } else if (theResponseText && theResponseText.includes(".pdf")) {
+      console.log(responseText);
+
+      messageFunc = await client.messages.create({
+        from: "whatsapp:+14155238886",
+        to: `whatsapp:+${req.body.whatsappNumber}`,
+        body: "Here are the book results:",
+        mediaUrl: [theResponseText],
+      });
+    } else {
+      console.log("Entereted ", "below");
+
+      messageFunc = await client.messages.create({
+        from: "whatsapp:+14155238886",
+        contentSid: "HX2cc589a48c4a7edfedbb7289b11864e0",
+        contentVariables: JSON.stringify({
+          "2": `${theResponseText}`,
+        }),
+        to: `whatsapp:+${req.body.whatsappNumber}`,
+      });
+    }
 
     const message = messageFunc.sid;
     res.send(success("Successfully sent the message", message));
