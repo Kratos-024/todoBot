@@ -3,7 +3,11 @@ import { asyncHandler } from "../utils/AsyncHandler";
 import { badRequest } from "../utils/ApiError";
 import { success } from "../utils/ApiResponse";
 import { createAccount } from "./user.controller";
-import { allTodoSend, todoDelete, todoSave } from "./todo.controller";
+import stripToMinute, {
+  allTodoSend,
+  todoDelete,
+  todoSave,
+} from "./todo.controller";
 import {
   getPdf,
   deletePdfData,
@@ -31,92 +35,64 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
     oldHistory = isChatExisted[0].chatHistory;
   }
   const pdfData = isChatExisted[0];
-  // const fullQ = `
-  // You are an intelligent assistant. Based on the user input, identify what the user wants and respond in one of the following structured JSON formats:
-  // This is the old History of what user and ai talked ${oldHistory} and ${pdfData}
-  // if something asked by user related to user include in oldHistory then use it
-  // Rules:
-
-  // 1. If the user is mentioning **a task or activity to do** (e.g. meetings, reminders, chores, events, plans), even if it's written casually like "I have a date at 9am", respond with:
-  //    { "task": "<detected task>", "rTime": "<detected time>", "query": "1" }
-
-  // 2. If the user wants to **edit a todo** and mentions "edit" and a "todoId", respond with:
-  //    { "todoId": "<todoId>", "query": "2" }
-
-  // 3. If the user wants to **view all todos** and says phrases like "show me all todos", "get my todos", or "I want to see my todos", respond with:
-  //    { "query": "3" }
-
-  // 4. If the user wants to **delete a todo** and mentions "delete" and a "todoId", respond with:
-  //    { "todoId": "<todoId>", "query": "4" }
-
-  // 5. If the user wants a **PDF of a book** (e.g., "Give me a PDF of this book" or "Can I get the PDF of <bookname> by <author>?"):
-  //    - Extract the book name and author from the user's input.
-  //    - You may improve the search query by adding extra context (e.g., edition, genre, or publication year) if available or inferred.
-  //    - Respond with:
-  //      { "query": "6", "bookName": "<cleaned book name>", "author": "<cleaned author name or empty string if unknown>", "url": "<Improved search string like '<book name> by <author> full book pdf'>" }
-
-  // 6. If the input doesn't match any of the above cases (i.e. it's just a question or random message), then:
-  //    - Understand the user's question.
-  //    - Answer it briefly.
-  //    - Wrap the answer like this:
-  //      { "query": "5", "response": "<your reply to the user>" }
-
-  // Important:
-
-  // - Return **only** a single JSON object based on the rule.
-  // - All **keys and values must be strings**, even numbers (e.g., "query": "1").
-  // - Do **not** include any code formatting like \`\`\`json or explanations.
-  // - Be concise and accurate.
-
-  // User Question: ${getQuestion}
-  // `;
   //@ts-ignore
   trimChatHistory(req.user?._id);
+  const now = new Date();
+
+  const currentTime = stripToMinute(new Date(now));
+
   const fullQ = `
-  You are an intelligent assistant. Based on the user input, identify what the user wants and respond in one of the following structured JSON formats:
-  This is the old History of what user and ai talked: ${oldHistory} and ${pdfData}
-  If something asked by user is included in oldHistory, then use it.
+  You are an intelligent assistant that responds with structured JSON based on the user's message. Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed.
   
-  Rules:
+  Current date and time is: "${currentTime}" (ISO format, accurate up to the minute)
   
-  1. If the user is mentioning **a task or activity to do** (e.g. meetings, reminders, chores, events, plans), even if it's written casually like "I have a date at 9am", respond with:
-     { "task": "<detected task>", "rTime": "<detected time>", "query": "1" }
+  Respond with only one of the following JSON formats:
   
-  2. If the user wants to **edit a todo** and mentions "edit" and a "todoId", respond with:
-     { "todoId": "<todoId>", "query": "2" }
+  ---
   
-  3. If the user wants to **view all todos** and says phrases like "show me all todos", "get my todos", or "I want to see my todos", respond with:
-     { "query": "3" }
+  1. If the user mentions a **task or activity** (e.g. meetings, reminders, chores, events), respond with:
   
-  4. If the user wants to **delete a todo** and mentions "delete" and a "todoId", respond with:
-     { "todoId": "<todoId>", "query": "4" }
+  {
+    "task": "<detected task>",
+    "rTime": "<ISO 8601 datetime string accurate up to the minute (no seconds or milliseconds)>",
+    "query": "1"
+  }
   
-  5. If the user wants a **PDF of a book** (e.g., "Give me a PDF of this book" or "Can I get the PDF of <bookname> by <author>?"):
-     - Extract the book name and author from the user's input.
-     - You may improve the search query by adding extra context (e.g., edition, genre, or publication year) if available or inferred.
-     - Respond with:
-       { "query": "6", "bookName": "<cleaned book name>", "author": "<cleaned author name or empty string if unknown>", "url": "<Improved search string like '<book name> by <author> full book pdf'>" }
+  - Extract the task and the **time** from the user's message.
+  - Use the current time ("${currentTime}") to calculate the actual ISO datetime.
+  - If the user says "remind me at 9am", compare it to the current time.
+    - If 9am has already passed today, schedule it for **tomorrow 9am** instead.
+  - Format "rTime" like: "2025-05-05T09:00Z" (note: no seconds or milliseconds).
   
-  6. If the input doesn't match any of the above cases (i.e. it's just a question or random message), then:
-     - Understand the user's question.
-     - Answer it briefly.
-     - Wrap the answer like this:
-       { "query": "5", "response": "<your reply to the user>" }
-  
-  7. If the user replies with a number (like "0", "1", etc., but not a negative number) and **pdfData** includes some links, then:
-     - Match the number with the corresponding numbered element of object in pdfData array then add that object link into below json.
-     - Respond with:
-       { "query": "7", "url": "<link>" }
-  
-  Important:
-  
-  - Return **only** a single JSON object based on the rule.
-  - All **keys and values must be strings**, even numbers (e.g., "query": "1").
-  - Do **not** include any code formatting like \`\`\`json or explanations.
-  - Be concise and accurate.
-  
-  User Question: ${getQuestion}
-  `;
+  ---
+
+2. If user wants to **edit a todo** (mentions "edit" and "todoId"):
+{ "todoId": "<todoId>", "query": "2" }
+
+3. If user wants to **view all todos** (phrases like "show my todos", "list todos"):
+{ "query": "3" }
+
+4. If user wants to **delete a todo** (mentions "delete" and "todoId"):
+{ "todoId": "<todoId>", "query": "4" }
+
+5. If user asks for a **PDF of a book** (e.g., "Give me PDF of <book name> by <author>"):
+{ "query": "6", "bookName": "<book name>", "author": "<author or empty string>", "url": "<search string for finding PDF>" }
+
+6. If the input is just a **normal question or message**, respond with a brief answer:
+{ "query": "5", "response": "<your short answer>" }
+
+7. If user replies with a **number** (e.g., "0", "1") and pdfData includes links, respond with:
+{ "query": "7", "url": "<corresponding pdf link from pdfData>" }
+
+---
+
+Important:
+- Always return **only one valid JSON object**, no explanations or code formatting.
+- All keys and values must be strings (even numbers like "1").
+- Be precise, clean, and follow the rules strictly.
+
+User Input: ${getQuestion}
+`;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
@@ -276,22 +252,17 @@ User prompt: ${getQuestion}
   }
 };
 
-export const manageChatData = async (userId: string) => {
-  const chatDoc = await AiChat.findOne({ userId });
+export const AiFormatter = async (todo: any): Promise<string> => {
+  const prompt = `Send a friendly reminder: "${todo.task}" at ${new Date(
+    todo.rTime
+  ).toLocaleTimeString()}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
 
-  if (!chatDoc) return;
-
-  if (chatDoc.chatHistory.length > 20) {
-    chatDoc.chatHistory = chatDoc.chatHistory.slice(5);
-  }
-
-  await chatDoc.save();
-
-  setTimeout(async () => {
-    const updatedDoc = await AiChat.findOne({ userId });
-    if (updatedDoc && updatedDoc.pdfBookData.length > 0) {
-      updatedDoc.pdfBookData = [];
-      await updatedDoc.save();
-    }
-  }, 5 * 60 * 1000);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input: prompt }),
+  });
+  const data = await response.json();
+  return data.text || "Don't forget your task!";
 };

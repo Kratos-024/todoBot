@@ -12,8 +12,10 @@ const sendMessage = asyncHandler(async (req: Request, res: Response) => {
   if (!req.body.response || !req.body.response.data) {
     return res.send(badRequest("Response is empty or malformed"));
   }
-
   let responseText = req.body.response.data;
+
+  console.log("Here comes", responseText);
+  console.log("Here comes2", req.body.response);
   let theResponseText: string | any[] = "";
   if (Array.isArray(responseText) && responseText[0].task) {
     responseText.map((ele) => {
