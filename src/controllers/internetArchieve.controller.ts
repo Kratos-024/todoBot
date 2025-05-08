@@ -35,12 +35,19 @@ const getPdf = async (req: Request, bookName: string) => {
         pdfBookData: filterdSearchArray,
       }
     );
-
-    let theResponseText = filterdSearchArray
-      .map((ele: any) =>
-        ele.imgSrc && ele.imgSrc[0] ? ele.imgSrc[0].src : undefined
-      )
-      .filter((src: any) => src !== undefined);
+    const theResponseText = filterdSearchArray
+      .map((ele: any) => {
+        const srcImg = ele.imgSrc?.[0]?.src;
+        if (srcImg) {
+          return {
+            srcImg,
+            title: ele.title || "undefined",
+            snippet: ele.snippet || "undefined",
+          };
+        }
+        return undefined;
+      })
+      .filter((item: any) => item !== undefined);
 
     return theResponseText;
   } catch (error) {

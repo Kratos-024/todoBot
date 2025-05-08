@@ -44,22 +44,15 @@ export const getTodo = async () => {
       const taskRounded = stripToMinute(new Date(rTime));
 
       if (currentRounded === taskRounded) {
-        console.log("Match found! Triggering message send");
-
         const message = await AiFormatter(todo);
         todoDelete(
           todo._id.toString().split(`ObjectId`)[0],
           todo.whatsappNumber
         );
-        console.log(message);
-        const responsee = await axios.post(
-          "http://localhost:8000/api/v1/message/send-message",
-          {
-            response: message,
-            whatsappNumber: todo.whatsappNumber,
-          }
-        );
-        console.log(responsee);
+        await axios.post("http://localhost:8000/api/v1/message/send-message", {
+          response: message,
+          whatsappNumber: todo.whatsappNumber,
+        });
       }
     }
   } catch (error) {
