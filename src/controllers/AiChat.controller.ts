@@ -95,6 +95,7 @@ User Input: ${getQuestion}
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
+    console.log(aiApi);
     const aiResponse = await fetch(url, {
       method: "POST",
       headers: {
