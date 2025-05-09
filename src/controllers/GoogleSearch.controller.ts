@@ -2,12 +2,12 @@ import axios from "axios";
 import fs from "fs";
 import { AiChat } from "../models/AiChat.models";
 import { Request } from "express";
-const api_key = "AIzaSyAvNUI5dmu0EwuntwXEHqmHr1rXb6OJGY0";
-const gsi = "613ba84505d114c91";
+const GoogleApiKey = process.env.Google_Api_Key;
+const gsi = process.env.gsi;
 const getPdf = async (req: Request, bookName: string) => {
   const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(
     bookName + " filetype:pdf"
-  )}&key=${api_key}&cx=${gsi}`;
+  )}&key=${GoogleApiKey}&cx=${gsi}`;
 
   try {
     const response = await axios.get(url);
@@ -75,7 +75,7 @@ const trimChatHistory = async (userId: string) => {
   }
 
   if (chatDoc.chatHistory.length > 20) {
-    chatDoc.chatHistory = chatDoc.chatHistory.slice(5); // Remove the first 5 items to keep only the latest 15
+    chatDoc.chatHistory = chatDoc.chatHistory.slice(5);
     await chatDoc.save();
   }
 };

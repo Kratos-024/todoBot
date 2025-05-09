@@ -1,6 +1,4 @@
-import { response } from "express";
 import mongoose, { model } from "mongoose";
-import { number } from "zod";
 export interface IAiChat extends Document {
   userId: string;
   chatHistory: Array<{
