@@ -15,7 +15,7 @@ import {
 import { Boom } from "@hapi/boom";
 import P from "pino";
 import qrcode from "qrcode";
-import { error } from "console";
+import qrcodeTerminal from "qrcode-terminal";
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
 
@@ -39,11 +39,12 @@ const initializeWhatsApp = async () => {
     sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
       if (qr) {
-        console.log("QR Code for WhatsApp connection received");
+        console.log("📲 Scan this QR with WhatsApp:");
+        qrcodeTerminal.generate(qr, { small: true });
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const qrFilePath = path.join(
-          "D:/New folder (6)/src/temp/qr-codes",
+          "src/temp/qr-codes",
           `whatsapp-qr-${timestamp}.png`
         );
 
@@ -58,17 +59,15 @@ const initializeWhatsApp = async () => {
           },
           (err) => {
             if (err) {
-              console.error("Failed to save QR code to file:", err);
+              console.error("❌ Failed to save QR code to file:", err);
             } else {
               const absolutePath = path.resolve(qrFilePath);
               console.log(`✅ QR Code saved to: ${absolutePath}`);
-              console.log(
-                `Open this file and scan it with WhatsApp to authenticate.`
-              );
             }
           }
         );
       }
+
       if (connection === "close") {
         const shouldReconnect =
           lastDisconnect?.error instanceof Boom
