@@ -2,19 +2,16 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { badRequest } from "../utils/ApiError";
 import { success } from "../utils/ApiResponse";
-import { createAccount } from "./user.controller";
+import { createAccount, trimChatHistory } from "./user.controller";
 import stripToMinute, {
   allTodoSend,
   todoDelete,
   todoSave,
 } from "./todo.controller";
-import {
-  getPdf,
-  deletePdfData,
-  trimChatHistory,
-} from "./GoogleSearch.controller";
+import { getPdf, deletePdfData } from "./GoogleSearch.controller";
 import { AiChat, IAiChat } from "../models/AiChat.models";
 const aiApi = process.env.Gemini_Api_key;
+
 export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const { getQuestion, whatsappNumber } = req.body;
 
@@ -41,28 +38,29 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const currentTime = stripToMinute(new Date(now));
 
   const fullQ = `
-  You are an intelligent assistant that responds with structured JSON based on the user's message. Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed.
-  
+  You are an intelligent assistant that responds with structured JSON based on the user's message.
+  Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed !!!ERY VERY IMPORTANT.
+
   Current date and time is: "${currentTime}" (ISO format, accurate up to the minute)
-  
+
   Respond with only one of the following JSON formats:
-  
+
   ---
-  
+
   1. If the user mentions a **task or activity** (e.g. meetings, reminders, chores, events), respond with:
-  
+
   {
     "task": "<detected task>",
     "rTime": "<ISO 8601 datetime string accurate up to the minute (no seconds or milliseconds)>",
     "query": "1"
   }
-  
+
   - Extract the task and the **time** from the user's message.
   - Use the current time ("${currentTime}") to calculate the actual ISO datetime.
   - If the user says "remind me at 9am", compare it to the current time.
     - If 9am has already passed today, schedule it for **tomorrow 9am** instead.
   - Format "rTime" like: "2025-05-05T09:00Z" (note: no seconds or milliseconds).
-  
+
   ---
 
 2. If user wants to **edit a todo** (mentions "edit" and "todoId"):
@@ -137,9 +135,7 @@ User Input: ${getQuestion}
       response = "Todo Deleted Successfully";
       //@ts-ignore
       if (!deletedTodoReponse?.data) {
-        response =
-          "Something went wrong with this todo  id maybe it is not in database " +
-          responsedObj["todoId"];
+        response = responsedObj["todoId"];
         res.status(200).send(success("Operation done successfully", response));
         return;
       }
@@ -151,10 +147,7 @@ User Input: ${getQuestion}
       response = await getPdf(req, responsedObj["url"]);
     } else if (responsedObj["query"] == "7") {
       response = responsedObj["url"];
-      console.log(
-        "yeah this one numbered 0yeah this one numbered 0yeah this one numbered 0",
-        response
-      );
+
       //@ts-ignore
       deletePdfData(req.user?._id);
     }
@@ -194,7 +187,10 @@ export const checkAuthAi = async (
     { username: <extracted username>,password: <extracted password>, email": <extracted email>, "query": "1" }
 
   - If only one or three of above are mentioned **but it's not in a valid credential format** for login, or if the context seems like an account creation attempt, respond with:
-    { "query": "2", "response": "You are not authorized to enter credentials like this. If you want to create an account, please follow the proper procedure." }
+    { "query": "2", "response": "You are not authorized to enter credentials like this. If you want to create an account, please follow the proper procedure,
+     username: <username>"
+     email:<email(can enter fake email also cuz no otp problem for now)>
+     password:<password> }
 
 Important:
 

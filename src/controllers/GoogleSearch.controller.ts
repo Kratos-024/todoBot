@@ -66,18 +66,5 @@ const deletePdfData = async (userId: string) => {
   chatDoc.pdfBookData = [];
   await chatDoc.save();
 };
-const trimChatHistory = async (userId: string) => {
-  const chatDoc = await AiChat.findOne({ userId });
 
-  if (!chatDoc) {
-    console.log("User not found");
-    return;
-  }
-
-  if (chatDoc.chatHistory.length > 20) {
-    chatDoc.chatHistory = chatDoc.chatHistory.slice(5);
-    await chatDoc.save();
-  }
-};
-
-export { getPdf, deletePdfData, trimChatHistory };
+export { getPdf, deletePdfData };

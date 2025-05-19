@@ -14,23 +14,35 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@huggingface/inference": "^3.13.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/mongoose": "^5.11.96",
+    "@whiskeysockets/baileys": "^6.5.0",
     "axios": "^1.9.0",
+    "baileys": "^6.7.17",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "fs-extra": "^11.3.0",
     "googleapis": "^148.0.0",
+    "huggingface": "^1.4.0",
     "mongoose": "^8.14.0",
     "node-cron": "^3.0.3",
+    "openai": "^4.100.0",
+    "pino": "^8.15.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
     "twilio": "^5.5.2",
     "typescript": "^5.8.3",
     "zod": "^3.24.3"
   },
   "devDependencies": {
     "@types/node-cron": "^3.0.11",
+    "@types/qrcode": "^1.5.5",
+    "@types/qrcode-terminal": "^0.12.2",
     "ts-node-dev": "^2.0.0"
   }
 }

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { User } from "../models/user.model";
 import { LoginInput } from "../types/user.type";
+import { AiChat } from "../models/AiChat.models";
 
 export const createAccount = async (
   req: Request,
@@ -63,9 +64,21 @@ export const login = async (req: Request, res: Response) => {
 };
 export const get = async (req: Request, res: Response) => {
   try {
-    console.log(process.env.PORT);
     res.status(200).json({ message: "Login successful", userId: "user._id" });
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
+  }
+};
+export const trimChatHistory = async (userId: string) => {
+  const chatDoc = await AiChat.findOne({ userId });
+
+  if (!chatDoc) {
+    console.log("User not found");
+    return;
+  }
+
+  if (chatDoc.chatHistory.length > 30) {
+    chatDoc.chatHistory = chatDoc.chatHistory.slice(5);
+    await chatDoc.save();
   }
 };

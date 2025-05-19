@@ -1,14 +1,8 @@
-import { Router } from "express";
-import {
-  getMessage,
-  sendMessage,
-  verifyWebhook,
-} from "../controllers/chatBot.controller";
+import express from "express";
+import { sendMessageHandler } from "../controllers/baileys.controller";
 
-const messageRouter = Router();
-messageRouter.route("/send-message").post(sendMessage);
+const messageRouter = express.Router();
 
-messageRouter.route("/get-message/webhook").post(getMessage);
-messageRouter.route("/get-message/webhook").get(verifyWebhook);
+messageRouter.post("/send-message", sendMessageHandler);
 
 export default messageRouter;
