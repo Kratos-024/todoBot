@@ -38,12 +38,13 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const currentTime = stripToMinute(new Date(now));
 
   const fullQ = `
-  You are an intelligent assistant that responds with structured JSON based on the user's message.
+  You are an intelligent assistant that responds with structured JSON based on the user's message. You just need to give message format like the work of sending the reminder or sending pdf is mine
   Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed !!!ERY VERY IMPORTANT.
 
   Current date and time is: "${currentTime}" (ISO format, accurate up to the minute)
 
   Respond with only one of the following JSON formats:
+
 
   ---
 
