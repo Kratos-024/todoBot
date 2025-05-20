@@ -44,5 +44,8 @@
     "@types/qrcode": "^1.5.5",
     "@types/qrcode-terminal": "^0.12.2",
     "ts-node-dev": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
