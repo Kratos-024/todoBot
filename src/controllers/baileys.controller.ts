@@ -10,8 +10,8 @@ import {
   useMultiFileAuthState,
   proto,
 } from "@whiskeysockets/baileys";
-import { Boom } from "@hapi/boom";
 import P from "pino";
+import { WABrowserDescription } from "@whiskeysockets/baileys";
 
 import fs from "fs";
 import axios from "axios";
@@ -23,30 +23,42 @@ if (!fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 }
 
+let globalReconnectAttempts = 0;
+let reconnectTimer: NodeJS.Timeout | null = null;
+let lastQrTime = 0;
+let hasLoggedOut = false;
+
 const initializeWhatsApp = async () => {
   try {
+    if (hasLoggedOut) {
+      console.log("Previously logged out. Not reconnecting.");
+      return null;
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+
+    const browserDescription: WABrowserDescription = [
+      `WhatsAppBot-${Math.floor(Math.random() * 1000)}`,
+      "Safari",
+      "1.0.0",
+    ];
 
     sock = makeWASocket({
       auth: state,
       logger: P({ level: "silent" }),
-      browser: Browsers.macOS("Safari"),
+      browser: browserDescription,
       printQRInTerminal: false, // Disable default QR printing
       connectTimeoutMs: 60000, // Increase connection timeout
       qrTimeout: 120000, // QR timeout of 2 minutes
+      markOnlineOnConnect: false, // Try to avoid conflict issues
+      syncFullHistory: false, // Don't try to sync full message history on connect
     });
 
     sock.ev.on("creds.update", saveCreds);
 
-    let lastQrTime = 0;
-    let reconnectAttempts = 0;
-    //@ts-ignore
-    let reconnectTimer = null;
-
     sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      // Handle QR code display with rate limiting
       if (qr) {
         const currentTime = Date.now();
         if (currentTime - lastQrTime >= 2 * 60 * 1000) {
@@ -58,57 +70,58 @@ const initializeWhatsApp = async () => {
           console.log("------------------------------\n");
 
           lastQrTime = currentTime;
-          reconnectAttempts = 0; // Reset reconnect attempts when QR is shown
         }
       }
 
-      // Handle connection state changes
       if (connection === "close") {
-        // Clear any existing reconnect timer
-        //@ts-ignore
-
         if (reconnectTimer) {
           clearTimeout(reconnectTimer);
           reconnectTimer = null;
         }
-        //@ts-ignore
+
+        const error = lastDisconnect?.error;
+        const statusCode = (error as any)?.output?.statusCode;
+
         console.log(
-          "Output addsafdsfdsfdsfsdfsdfsdfdsfds",
-          lastDisconnect?.error
+          `Connection closed. Status code: ${statusCode || "unknown"}`
         );
-        //@ts-ignore
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
 
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-        console.log(`Connection closed. Status code: ${statusCode}`);
-
-        if (shouldReconnect) {
-          reconnectAttempts++;
-
-          // Calculate backoff delay - starts at 5 seconds, doubles each time, caps at 5 minutes
-          const backoffDelay = Math.min(
-            5000 * Math.pow(2, reconnectAttempts - 1),
-            5 * 60 * 1000
-          );
-
+        if (statusCode === 440) {
           console.log(
-            `Reconnecting to WhatsApp (attempt ${reconnectAttempts}) after ${
-              backoffDelay / 1000
-            } seconds...`
+            "Detected WhatsApp multi-device conflict (440). Adding extra delay before reconnect."
           );
-
-          // Schedule reconnection with exponential backoff
-          reconnectTimer = setTimeout(() => {
-            console.log("Executing reconnection...");
-            initializeWhatsApp();
-          }, backoffDelay);
-        } else {
-          console.log("Logged out from WhatsApp. Not reconnecting.");
+          globalReconnectAttempts += 2;
         }
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.log("Logged out from WhatsApp. Not reconnecting.");
+          hasLoggedOut = true;
+          return;
+        }
+
+        globalReconnectAttempts++;
+
+        const backoffDelay = Math.min(
+          10000 * Math.pow(1.5, globalReconnectAttempts - 1),
+          10 * 60 * 1000
+        );
+
+        console.log(
+          `Reconnecting to WhatsApp (attempt ${globalReconnectAttempts}) after ${Math.round(
+            backoffDelay / 1000
+          )} seconds...`
+        );
+
+        reconnectTimer = setTimeout(() => {
+          console.log("Executing reconnection...");
+          initializeWhatsApp();
+        }, backoffDelay);
       } else if (connection === "open") {
         console.log("✅ Connected to WhatsApp");
-        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+
+        if (globalReconnectAttempts > 0) {
+          globalReconnectAttempts = Math.max(1, globalReconnectAttempts - 1);
+        }
       }
     });
 
@@ -127,9 +140,16 @@ const initializeWhatsApp = async () => {
     return sock;
   } catch (error) {
     console.error("Failed to initialize WhatsApp:", error);
-    // Wait 10 seconds before retrying after an initialization error
-    console.log("Retrying initialization in 10 seconds...");
-    setTimeout(initializeWhatsApp, 10000);
+
+    const retryDelay = globalReconnectAttempts > 5 ? 30000 : 10000;
+
+    console.log(`Retrying initialization in ${retryDelay / 1000} seconds...`);
+
+    globalReconnectAttempts++;
+
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(initializeWhatsApp, retryDelay);
+
     return null;
   }
 };
