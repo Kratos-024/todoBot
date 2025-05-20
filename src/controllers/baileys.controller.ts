@@ -35,20 +35,40 @@ const initializeWhatsApp = async () => {
 
     sock.ev.on("creds.update", saveCreds);
 
+    let lastQrTime = 0;
+
     sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
-      if (qr) {
-        if (connection === "close") {
-          const shouldReconnect =
-            lastDisconnect?.error instanceof Boom
-              ? lastDisconnect.error.output?.statusCode !==
-                DisconnectReason.loggedOut
-              : true;
 
-          if (shouldReconnect) initializeWhatsApp();
-        } else if (connection === "open") {
-          console.log("✅ Connected to WhatsApp");
+      if (qr) {
+        const currentTime = Date.now();
+        if (currentTime - lastQrTime >= 2 * 60 * 1000) {
+          console.log("\n------------------------------");
+          console.log("Scan the QR code below to log in:");
+          require("qrcode-terminal").generate(qr, { small: true });
+          console.log("QR code generated at:", new Date().toLocaleTimeString());
+          console.log("Will regenerate QR after 2 minutes if not scanned.");
+          console.log("------------------------------\n");
+
+          lastQrTime = currentTime;
         }
+      }
+
+      if (connection === "close") {
+        const shouldReconnect =
+          lastDisconnect?.error instanceof Boom
+            ? lastDisconnect.error.output?.statusCode !==
+              DisconnectReason.loggedOut
+            : true;
+
+        if (shouldReconnect) {
+          console.log("Reconnecting to WhatsApp...");
+          initializeWhatsApp();
+        } else {
+          console.log("Disconnected from WhatsApp.");
+        }
+      } else if (connection === "open") {
+        console.log("✅ Connected to WhatsApp");
       }
     });
 
@@ -70,7 +90,6 @@ const initializeWhatsApp = async () => {
     return null;
   }
 };
-
 const extractMessageContent = (message: proto.IWebMessageInfo) => {
   if (!message.message) return { type: "unknown", content: "" };
 
