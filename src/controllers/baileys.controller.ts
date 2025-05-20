@@ -12,9 +12,7 @@ import {
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import P from "pino";
-import qrcode from "qrcode";
-import qrcodeTerminal from "qrcode-terminal";
-import FormData from "form-data";
+
 import fs from "fs";
 import axios from "axios";
 
@@ -24,21 +22,6 @@ const AUTH_DIR = "./auth";
 if (!fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 }
-export const uploadQR = async (req: Request, res: Response): Promise<void> => {
-  try {
-    if (!req.file) {
-      res.status(400).json({ message: "No file uploaded." });
-      return;
-    }
-
-    console.log("✅ File received:", req.file.originalname);
-    res.status(200).json({ message: "File received successfully." });
-  } catch (error: any) {
-    res
-      .status(500)
-      .json({ message: "Error processing file", error: error.message });
-  }
-};
 
 const initializeWhatsApp = async () => {
   try {
@@ -55,70 +38,17 @@ const initializeWhatsApp = async () => {
     sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
       if (qr) {
-        console.log("📲 Scan this QR with WhatsApp:");
-        qrcodeTerminal.generate(qr, { small: true });
+        if (connection === "close") {
+          const shouldReconnect =
+            lastDisconnect?.error instanceof Boom
+              ? lastDisconnect.error.output?.statusCode !==
+                DisconnectReason.loggedOut
+              : true;
 
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const qrFilePath = path.join(
-          "src/temp/qr-codes",
-          `whatsapp-qr-${timestamp}.png`
-        );
-
-        qrcode.toFile(
-          qrFilePath,
-          qr,
-          {
-            errorCorrectionLevel: "H",
-            type: "png",
-            margin: 1,
-            width: 800,
-          },
-          async (err) => {
-            if (err) {
-              console.error("❌ Failed to save QR code to file:", err);
-            } else {
-              const absolutePath = path.resolve(qrFilePath);
-              console.log(`✅ QR Code saved to: ${absolutePath}`);
-
-              try {
-                const formData = new FormData();
-                formData.append("file", fs.createReadStream(absolutePath));
-
-                const response = await axios.post(
-                  "https://todobot-5ftz.onrender.com/api/v1/qr/send-qr",
-                  formData,
-                  {
-                    headers: formData.getHeaders(),
-                  }
-                );
-
-                console.log(
-                  "✅ QR Code sent to endpoint successfully:",
-                  response.data
-                );
-              } catch (err: any) {
-                console.error("❌ Failed to send QR to endpoint:", err.message);
-              }
-            }
-          }
-        );
-      }
-
-      if (connection === "close") {
-        const shouldReconnect =
-          lastDisconnect?.error instanceof Boom
-            ? lastDisconnect.error.output?.statusCode !==
-              DisconnectReason.loggedOut
-            : true;
-        console.log(
-          "Connection closed due to",
-          lastDisconnect?.error,
-          ", reconnecting:",
-          shouldReconnect
-        );
-        if (shouldReconnect) initializeWhatsApp();
-      } else if (connection === "open") {
-        console.log("✅ Connected to WhatsApp");
+          if (shouldReconnect) initializeWhatsApp();
+        } else if (connection === "open") {
+          console.log("✅ Connected to WhatsApp");
+        }
       }
     });
 
