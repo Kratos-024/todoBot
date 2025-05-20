@@ -85,7 +85,7 @@ const initializeWhatsApp = async () => {
                 formData.append("file", fs.createReadStream(absolutePath));
 
                 const response = await axios.post(
-                  "http://localhost:8000/api/v1/qr/send-qr",
+                  "https://todobot-5ftz.onrender.com/api/v1/qr/send-qr",
                   formData,
                   {
                     headers: formData.getHeaders(),
