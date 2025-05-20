@@ -7,6 +7,5 @@ const cron = require("node-cron");
 app.listen(PORT, () => {
   console.log("Server has been started on PORT", PORT);
   cron.schedule("* * * * * *", getTodo);
-
   connectDB();
 });

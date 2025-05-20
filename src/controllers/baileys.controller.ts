@@ -2,9 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { success } from "../utils/ApiResponse";
 import { badRequest } from "../utils/ApiError";
-import fs from "fs";
 import path from "path";
-import axios from "axios";
 import {
   default as makeWASocket,
   DisconnectReason,
@@ -16,6 +14,9 @@ import { Boom } from "@hapi/boom";
 import P from "pino";
 import qrcode from "qrcode";
 import qrcodeTerminal from "qrcode-terminal";
+import FormData from "form-data";
+import fs from "fs";
+import axios from "axios";
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
 
@@ -23,6 +24,21 @@ const AUTH_DIR = "./auth";
 if (!fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 }
+export const uploadQR = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ message: "No file uploaded." });
+      return;
+    }
+
+    console.log("✅ File received:", req.file.originalname);
+    res.status(200).json({ message: "File received successfully." });
+  } catch (error: any) {
+    res
+      .status(500)
+      .json({ message: "Error processing file", error: error.message });
+  }
+};
 
 const initializeWhatsApp = async () => {
   try {
@@ -57,12 +73,32 @@ const initializeWhatsApp = async () => {
             margin: 1,
             width: 800,
           },
-          (err) => {
+          async (err) => {
             if (err) {
               console.error("❌ Failed to save QR code to file:", err);
             } else {
               const absolutePath = path.resolve(qrFilePath);
               console.log(`✅ QR Code saved to: ${absolutePath}`);
+
+              try {
+                const formData = new FormData();
+                formData.append("file", fs.createReadStream(absolutePath));
+
+                const response = await axios.post(
+                  "http://localhost:8000/api/v1/qr/send-qr",
+                  formData,
+                  {
+                    headers: formData.getHeaders(),
+                  }
+                );
+
+                console.log(
+                  "✅ QR Code sent to endpoint successfully:",
+                  response.data
+                );
+              } catch (err: any) {
+                console.error("❌ Failed to send QR to endpoint:", err.message);
+              }
             }
           }
         );
