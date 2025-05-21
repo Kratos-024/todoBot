@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { stayUp } from "../controllers/cron.controller";
+import { SendPingRequest } from "../controllers/cron.controller";
 
 const cronJobRouter = Router();
 
-cronJobRouter.route("/stayUptime").post(stayUp);
+cronJobRouter.route("stayUptime").get(sendPingRequest);
 export default cronJobRouter;
