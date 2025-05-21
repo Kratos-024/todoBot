@@ -1,10 +1,7 @@
-// import { Router } from "express";
-// import { createAccount, get, login } from "../controllers/user.controller";
+//import { Router } from "express";
+//import { stayUp } from "../controllers/cron.controller";
 
-// const userRouter = Router();
+//const cronJobRouter = Router();
 
-// userRouter.route("/create-account").post(createAccount);
-// userRouter.route("/login-account").post(login);
-// userRouter.route("/get-message").get(get);
-
-// export default userRouter;
+//cronJobRouter.route("/////////////////////////tayUptime").post(stayUp);
+//export default cronJobRouter;
