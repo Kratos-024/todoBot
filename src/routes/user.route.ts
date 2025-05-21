@@ -1,7 +1,7 @@
-import { Router } from "express";
-import { stayUp } from "../controllers/cron.controller";
+//import { Router } from "express";
+//import { stayUp } from "../controllers/cron.controller";
 
-const cronJobRouter = Router();
+//const cronJobRouter = Router();
 
-cronJobRouter.route("/stayUptime").post(stayUp);
-export default cronJobRouter;
+//cronJobRouter.route("/////////////////////////tayUptime").post(stayUp);
+//export default cronJobRouter;
