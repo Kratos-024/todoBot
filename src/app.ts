@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env" });
 import messageRouter from "./routes/messages.routes";
 import aiChatRouter from "./routes/aichat.routes";
-import cronJobRouter from "./routes/cron.routes
+import cronJobRouter from "./routes/cron.routes"
 
 
 console.log(process.env.PORT);
