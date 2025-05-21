@@ -76,7 +76,7 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
 5. If user asks for a **PDF of a book** (e.g., "Give me PDF of <book name> by <author>"):
 { "query": "6", "bookName": "<book name>", "author": "<author or empty string>", "url": "<search string for finding PDF>" }
 
-6. If the input is just a **normal question or message**, respond with a brief answer:
+6. If the input is just a **normal question or message or something u dont understand**, respond with a brief answer:
 { "query": "5", "response": "<your short answer>" }
 
 7. If user replies with a **number** (e.g., "0", "1") and pdfData includes links, respond with:
