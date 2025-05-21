@@ -9,42 +9,51 @@ import stripToMinute, {
   todoSave,
 } from "./todo.controller";
 import { getPdf, deletePdfData } from "./GoogleSearch.controller";
-import { AiChat, IAiChat } from "../models/AiChat.models";
+import { AiChat } from "../models/AiChat.models";
+
 const aiApi = process.env.Gemini_Api_key;
 
+/**
+ * Handles AI chat responses to user questions
+ */
 export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const { getQuestion, whatsappNumber } = req.body;
 
-  if (getQuestion == "") {
-    res.status(400).send(badRequest("Provide Question", getQuestion));
-    return;
+  if (!getQuestion || getQuestion === "") {
+    return res.status(400).send(badRequest("Provide Question", getQuestion));
   }
+
+  // Find user's chat history or create if it doesn't exist
   const isChatExisted = await AiChat.find({
     userId: req.user?._id,
   });
 
   let oldHistory;
+  let pdfData;
 
-  if (isChatExisted.length == 0) {
+  if (isChatExisted.length === 0) {
     await AiChat.create({ userId: req.user?._id });
   } else {
     oldHistory = isChatExisted[0].chatHistory;
+    pdfData = isChatExisted[0];
   }
-  const pdfData = isChatExisted[0];
+
+  // Trim chat history to avoid token limits
   //@ts-ignore
   trimChatHistory(req.user?._id);
+
+  // Get current time for task scheduling
   const now = new Date();
+  const currentTime = stripToMinute(now);
 
-  const currentTime = stripToMinute(new Date(now));
-
+  // Prepare the prompt for Gemini API
   const fullQ = `
   You are an intelligent assistant that responds with structured JSON based on the user's message. You just need to give message format like the work of sending the reminder or sending pdf is mine
-  Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed !!!ERY VERY IMPORTANT.
+  Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed !!!VERY VERY IMPORTANT.
 
   Current date and time is: "${currentTime}" (ISO format, accurate up to the minute)
 
   Respond with only one of the following JSON formats:
-
 
   ---
 
@@ -64,95 +73,135 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
 
   ---
 
-2. If user wants to **edit a todo** (mentions "edit" and "todoId"):
-{ "todoId": "<todoId>", "query": "2" }
+  2. If user wants to **edit a todo** (mentions "edit" and "todoId"):
+  { "todoId": "<todoId>", "query": "2" }
 
-3. If user wants to **view all todos** (phrases like "show my todos", "list todos"):
-{ "query": "3" }
+  3. If user wants to **view all todos** (phrases like "show my todos", "list todos"):
+  { "query": "3" }
 
-4. If user wants to **delete a todo** (mentions "delete" and "todoId"):
-{ "todoId": "<todoId>", "query": "4" }
+  4. If user wants to **delete a todo** (mentions "delete" and "todoId"):
+  { "todoId": "<todoId>", "query": "4" }
 
-5. If user asks for a **PDF of a book** (e.g., "Give me PDF of <book name> by <author>"):
-{ "query": "6", "bookName": "<book name>", "author": "<author or empty string>", "url": "<search string for finding PDF>" }
+  5. If user asks for a **PDF of a book** (e.g., "Give me PDF of <book name> by <author>"):
+  { "query": "6", "bookName": "<book name>", "author": "<author or empty string>", "url": "<search string for finding PDF>" }
 
-6. If the input is just a **normal question or message or something u dont understand**, respond with a brief answer:
-{ "query": "5", "response": "<your short answer>" }
+  6. If the input is just a **normal question or message or something u dont understand**, respond with a brief answer:
+  { "query": "5", "response": "<your short answer>" }
 
-7. If user replies with a **number** (e.g., "0", "1") and pdfData includes links, respond with:
-{ "query": "7", "url": "<corresponding pdf link from pdfData>" }
+  7. If user replies with a **number** (e.g., "0", "1") and pdfData includes links, respond with:
+  { "query": "7", "url": "<corresponding pdf link from pdfData>" }
 
----
+  ---
 
-Important:
-- Always return **only one valid JSON object**, no explanations or code formatting.
-- All keys and values must be strings (even numbers like "1").
-- Be precise, clean, and follow the rules strictly.
+  Important:
+  - Always return **only one valid JSON object**, no explanations or code formatting.
+  - Do NOT use triple backticks or any other markdown formatting.
+  - All keys and values must be strings (even numbers like "1").
+  - Be precise, clean, and follow the rules strictly.
 
-User Input: ${getQuestion}
-`;
+  User Input: ${getQuestion}
+  `;
 
   try {
+    // Call Gemini API
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
-    console.log(aiApi);
+
     const aiResponse = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: fullQ,
-              },
-            ],
-          },
-        ],
+        contents: [{ parts: [{ text: fullQ }] }],
       }),
     });
+
     const data = await aiResponse.json();
 
+    if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+      throw new Error("Invalid or empty response from Gemini API");
+    }
+
+    // Get AI response and extract JSON
     const getAnswer = data.candidates[0].content.parts[0].text;
-    const jsonMatch = getAnswer.match(/{[\s\S]*}/);
 
-    if (!jsonMatch) {
-      throw new Error("No valid JSON found in the response");
+    // Clean the response before parsing
+    let cleanedAnswer = getAnswer.trim();
+
+    // Remove any markdown formatting that might be present
+    if (cleanedAnswer.startsWith("```json")) {
+      cleanedAnswer = cleanedAnswer.replace(/```json\s*/, "");
+    }
+    if (cleanedAnswer.endsWith("```")) {
+      cleanedAnswer = cleanedAnswer.replace(/\s*```$/, "");
     }
 
-    const responsedObj = JSON.parse(jsonMatch[0]);
-    let response;
-    if (responsedObj["query"] == "1") {
-      todoSave(responsedObj, whatsappNumber);
-      response = "Todo saved successfully";
-    } else if (responsedObj["query"] == "3") {
-      response = await allTodoSend(whatsappNumber);
-    } else if (responsedObj["query"] == "4") {
-      const deletedTodoReponse = await todoDelete(
-        responsedObj["todoId"],
-        whatsappNumber
-      );
-      response = "Todo Deleted Successfully";
-      //@ts-ignore
-      if (!deletedTodoReponse?.data) {
-        response = responsedObj["todoId"];
-        res.status(200).send(success("Operation done successfully", response));
-        return;
+    // Parse JSON with error handling
+    let responsedObj;
+    try {
+      responsedObj = JSON.parse(cleanedAnswer);
+    } catch (jsonError) {
+      console.error("JSON parsing error:", jsonError);
+      console.error("Raw response:", getAnswer);
+
+      // Extract JSON using regex as fallback
+      const jsonMatch = getAnswer.match(/{[\s\S]*}/);
+      if (!jsonMatch) {
+        throw new Error("No valid JSON found in the response");
       }
-      response =
-        "Todo Deleted successfully with todoid: " + responsedObj["todoId"];
-    } else if (responsedObj["query"] == "5") {
-      response = responsedObj["response"];
-    } else if (responsedObj["query"] == "6") {
-      response = await getPdf(req, responsedObj["url"]);
-    } else if (responsedObj["query"] == "7") {
-      response = responsedObj["url"];
-
-      //@ts-ignore
-      deletePdfData(req.user?._id);
+      responsedObj = JSON.parse(jsonMatch[0]);
     }
 
+    // Process the response based on query type
+    let response;
+
+    switch (responsedObj.query) {
+      case "1": // Save todo
+        todoSave(responsedObj, whatsappNumber);
+        response = "Todo saved successfully";
+        break;
+
+      case "2": // Edit todo (not implemented in the original code)
+        response = `Edit functionality for todo ${responsedObj.todoId} not implemented yet`;
+        break;
+
+      case "3": // View all todos
+        response = await allTodoSend(whatsappNumber);
+        break;
+
+      case "4": // Delete todo
+        const deletedTodoResponse = await todoDelete(
+          responsedObj.todoId,
+          whatsappNumber
+        );
+
+        if (!deletedTodoResponse) {
+          response = responsedObj.todoId;
+        } else {
+          response = `Todo deleted successfully with ID: ${responsedObj.todoId}`;
+        }
+        break;
+
+      case "5": // Normal question/response
+        response = responsedObj.response;
+        break;
+
+      case "6": // Get PDF
+        response = await getPdf(req, responsedObj.url);
+        break;
+
+      case "7": // PDF URL from number
+        response = responsedObj.url;
+        //@ts-ignore
+
+        deletePdfData(req.user?._id);
+        break;
+
+      default:
+        response = "Unknown query type";
+    }
+
+    // Save conversation history
     const newMessage = {
       user: getQuestion,
       aiResponse: JSON.stringify(responsedObj),
@@ -161,20 +210,23 @@ User Input: ${getQuestion}
 
     await AiChat.findOneAndUpdate(
       { userId: req.user?._id },
-      {
-        $push: {
-          chatHistory: newMessage,
-        },
-      }
+      { $push: { chatHistory: newMessage } }
     );
 
-    res.status(200).send(success("Operation done successfully", response));
+    return res
+      .status(200)
+      .send(success("Operation done successfully", response));
   } catch (error: any) {
-    console.log(error);
-    res.status(400).send(badRequest("Something went wrong", error.error));
-    return;
+    console.error("Error in getAnswer:", error);
+    return res
+      .status(400)
+      .send(badRequest("Something went wrong", error.message || error));
   }
 });
+
+/**
+ * Handles user authentication and account creation via AI
+ */
 export const checkAuthAi = async (
   req: Request,
   getQuestion: string,
@@ -185,93 +237,124 @@ export const checkAuthAi = async (
 
   First, check if the input includes **these 3 things** 'username:' and 'password:' and 'email:'.
   - If yes, respond with:
-    { username: <extracted username>,password: <extracted password>, email": <extracted email>, "query": "1" }
+    { "username": "<extracted username>", "password": "<extracted password>", "email": "<extracted email>", "query": "1" }
 
   - If only one or three of above are mentioned **but it's not in a valid credential format** for login, or if the context seems like an account creation attempt, respond with:
     { "query": "2", "response": "You are not authorized to enter credentials like this. If you want to create an account, please follow the proper procedure,
-     username: <username>"
+     username: <username>
      email:<email(can enter fake email also cuz no otp problem for now)>
-     password:<password> }
+     password:<password>" }
 
-Important:
+  Important:
+  - Return **only** a single JSON object based on the rule.
+  - All **keys and values must be strings**, even numbers (e.g., "query": "1").
+  - Do **not** include any code formatting like \`\`\`json or explanations.
+  - Be concise and accurate.
 
-- Return **only** a single JSON object based on the rule.
-- All **keys and values must be strings**, even numbers (e.g., "query": "1").
-- Do **not** include any code formatting like \`\`\`json or explanations.
-- Be concise and accurate.
-
-User prompt: ${getQuestion}
-
-`;
+  User prompt: ${getQuestion}
+  `;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
+
     const aiResponse = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: fullQ,
-              },
-            ],
-          },
-        ],
+        contents: [{ parts: [{ text: fullQ }] }],
       }),
     });
+
     const data = await aiResponse.json();
+
+    if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+      throw new Error("Invalid or empty response from Gemini API");
+    }
+
     const getAnswer = data.candidates[0].content.parts[0].text;
-    const responsedObj = JSON.parse(getAnswer);
-    console.log(responsedObj);
+
+    // Clean and parse response
+    let cleanedAnswer = getAnswer.trim();
+
+    // Remove any markdown formatting
+    if (cleanedAnswer.startsWith("```json")) {
+      cleanedAnswer = cleanedAnswer.replace(/```json\s*/, "");
+    }
+    if (cleanedAnswer.endsWith("```")) {
+      cleanedAnswer = cleanedAnswer.replace(/\s*```$/, "");
+    }
+
+    let responsedObj;
+    try {
+      responsedObj = JSON.parse(cleanedAnswer);
+    } catch (jsonError) {
+      console.error("JSON parsing error:", jsonError);
+
+      // Extract JSON using regex as fallback
+      const jsonMatch = getAnswer.match(/{[\s\S]*}/);
+      if (!jsonMatch) {
+        throw new Error("No valid JSON found in the response");
+      }
+      responsedObj = JSON.parse(jsonMatch[0]);
+    }
+
+    console.log("Auth response:", responsedObj);
+
     let response = "";
-    if (responsedObj["query"] == "1") {
+
+    if (responsedObj.query === "1") {
       response = await createAccount(
         req,
-        responsedObj["username"],
-        responsedObj["password"],
-        responsedObj["email"],
+        responsedObj.username,
+        responsedObj.password,
+        responsedObj.email,
         whatsappNumber
       );
-    } else if (responsedObj["query"] == "2") {
-      response = responsedObj["response"];
+    } else if (responsedObj.query === "2") {
+      response = responsedObj.response;
     }
+
     await AiChat.create({ userId: req.user?._id });
     return response;
   } catch (error: any) {
-    console.log(error);
-
-    return;
+    console.error("Error in checkAuthAi:", error);
+    return `Error processing authentication: ${error.message || error}`;
   }
 };
 
+/**
+ * Formats todo reminder messages using AI
+ */
 export const AiFormatter = async (todo: any): Promise<string> => {
   const prompt = `Send a friendly reminder: "${todo.task}" at ${new Date(
     todo.rTime
   ).toLocaleTimeString()}`;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
-  const aiResponse = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            {
-              text: prompt,
-            },
-          ],
-        },
-      ],
-    }),
-  });
-  const data = await aiResponse.json();
-  const getAnswer = data.candidates[0].content.parts[0].text;
 
-  return getAnswer || "Don't forget your task!";
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
+
+    const aiResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+      }),
+    });
+
+    const data = await aiResponse.json();
+
+    if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+      return "Don't forget your task!";
+    }
+
+    const getAnswer = data.candidates[0].content.parts[0].text;
+    return getAnswer || "Don't forget your task!";
+  } catch (error) {
+    console.error("Error in AiFormatter:", error);
+    return "Don't forget your task!";
+  }
 };
