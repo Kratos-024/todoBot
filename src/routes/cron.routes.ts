@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { SendPingRequest } from "../controllers/cronJob.controller";
+import { sendPingRequest } from "../controllers/cronJob.controller";
 
 const cronJobRouter = Router();
 
