@@ -13,9 +13,6 @@ import { AiChat } from "../models/AiChat.models";
 
 const aiApi = process.env.Gemini_Api_key;
 
-/**
- * Handles AI chat responses to user questions
- */
 export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const { getQuestion, whatsappNumber } = req.body;
 
@@ -23,7 +20,6 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).send(badRequest("Provide Question", getQuestion));
   }
 
-  // Find user's chat history or create if it doesn't exist
   const isChatExisted = await AiChat.find({
     userId: req.user?._id,
   });
@@ -38,15 +34,13 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
     pdfData = isChatExisted[0];
   }
 
-  // Trim chat history to avoid token limits
   //@ts-ignore
   trimChatHistory(req.user?._id);
 
-  // Get current time for task scheduling
   const now = new Date();
+
   const currentTime = stripToMinute(now);
 
-  // Prepare the prompt for Gemini API
   const fullQ = `
   You are an intelligent assistant that responds with structured JSON based on the user's message. You just need to give message format like the work of sending the reminder or sending pdf is mine
   Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed !!!VERY VERY IMPORTANT.
@@ -54,9 +48,6 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   Current date and time is: "${currentTime}" (ISO format, accurate up to the minute)
 
   Respond with only one of the following JSON formats:
-
-  ---
-
   1. If the user mentions a **task or activity** (e.g. meetings, reminders, chores, events), respond with:
 
   {
@@ -103,7 +94,6 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   `;
 
   try {
-    // Call Gemini API
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApi}`;
 
     const aiResponse = await fetch(url, {
@@ -122,13 +112,10 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
       throw new Error("Invalid or empty response from Gemini API");
     }
 
-    // Get AI response and extract JSON
     const getAnswer = data.candidates[0].content.parts[0].text;
 
-    // Clean the response before parsing
     let cleanedAnswer = getAnswer.trim();
 
-    // Remove any markdown formatting that might be present
     if (cleanedAnswer.startsWith("```json")) {
       cleanedAnswer = cleanedAnswer.replace(/```json\s*/, "");
     }
@@ -136,15 +123,14 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
       cleanedAnswer = cleanedAnswer.replace(/\s*```$/, "");
     }
 
-    // Parse JSON with error handling
     let responsedObj;
     try {
       responsedObj = JSON.parse(cleanedAnswer);
     } catch (jsonError) {
       console.error("JSON parsing error:", jsonError);
+
       console.error("Raw response:", getAnswer);
 
-      // Extract JSON using regex as fallback
       const jsonMatch = getAnswer.match(/{[\s\S]*}/);
       if (!jsonMatch) {
         throw new Error("No valid JSON found in the response");
@@ -152,56 +138,37 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
       responsedObj = JSON.parse(jsonMatch[0]);
     }
 
-    // Process the response based on query type
     let response;
+    if (responsedObj.query === "1") {
+      todoSave(responsedObj, whatsappNumber);
+      response = "Todo saved successfully";
+    } else if (responsedObj.query === "2") {
+      response = `Edit functionality for todo ${responsedObj.todoId} not implemented yet`;
+    } else if (responsedObj.query === "3") {
+      response = await allTodoSend(whatsappNumber);
+    } else if (responsedObj.query === "4") {
+      const deletedTodoResponse = await todoDelete(
+        responsedObj.todoId,
+        whatsappNumber
+      );
 
-    switch (responsedObj.query) {
-      case "1": // Save todo
-        todoSave(responsedObj, whatsappNumber);
-        response = "Todo saved successfully";
-        break;
-
-      case "2": // Edit todo (not implemented in the original code)
-        response = `Edit functionality for todo ${responsedObj.todoId} not implemented yet`;
-        break;
-
-      case "3": // View all todos
-        response = await allTodoSend(whatsappNumber);
-        break;
-
-      case "4": // Delete todo
-        const deletedTodoResponse = await todoDelete(
-          responsedObj.todoId,
-          whatsappNumber
-        );
-
-        if (!deletedTodoResponse) {
-          response = responsedObj.todoId;
-        } else {
-          response = `Todo deleted successfully with ID: ${responsedObj.todoId}`;
-        }
-        break;
-
-      case "5": // Normal question/response
-        response = responsedObj.response;
-        break;
-
-      case "6": // Get PDF
-        response = await getPdf(req, responsedObj.url);
-        break;
-
-      case "7": // PDF URL from number
-        response = responsedObj.url;
-        //@ts-ignore
-
-        deletePdfData(req.user?._id);
-        break;
-
-      default:
-        response = "Unknown query type";
+      if (!deletedTodoResponse) {
+        response = responsedObj.todoId;
+      } else {
+        response = `Todo deleted successfully with ID: ${responsedObj.todoId}`;
+      }
+    } else if (responsedObj.query === "5") {
+      response = responsedObj.response;
+    } else if (responsedObj.query === "6") {
+      response = await getPdf(req, responsedObj.url);
+    } else if (responsedObj.query === "7") {
+      response = responsedObj.url;
+      // @ts-ignore
+      deletePdfData(req.user?._id);
+    } else {
+      response = "Unknown query type";
     }
 
-    // Save conversation history
     const newMessage = {
       user: getQuestion,
       aiResponse: JSON.stringify(responsedObj),
@@ -224,9 +191,6 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
-/**
- * Handles user authentication and account creation via AI
- */
 export const checkAuthAi = async (
   req: Request,
   getQuestion: string,
@@ -275,10 +239,8 @@ export const checkAuthAi = async (
 
     const getAnswer = data.candidates[0].content.parts[0].text;
 
-    // Clean and parse response
     let cleanedAnswer = getAnswer.trim();
 
-    // Remove any markdown formatting
     if (cleanedAnswer.startsWith("```json")) {
       cleanedAnswer = cleanedAnswer.replace(/```json\s*/, "");
     }
@@ -290,9 +252,7 @@ export const checkAuthAi = async (
     try {
       responsedObj = JSON.parse(cleanedAnswer);
     } catch (jsonError) {
-      console.error("JSON parsing error:", jsonError);
-
-      // Extract JSON using regex as fallback
+      console.error("JSON parsing error", jsonError);
       const jsonMatch = getAnswer.match(/{[\s\S]*}/);
       if (!jsonMatch) {
         throw new Error("No valid JSON found in the response");
@@ -324,9 +284,6 @@ export const checkAuthAi = async (
   }
 };
 
-/**
- * Formats todo reminder messages using AI
- */
 export const AiFormatter = async (todo: any): Promise<string> => {
   const prompt = `Send a friendly reminder: "${todo.task}" at ${new Date(
     todo.rTime

@@ -47,11 +47,11 @@ const initializeWhatsApp = async () => {
       auth: state,
       logger: P({ level: "silent" }),
       browser: browserDescription,
-      printQRInTerminal: false, // Disable default QR printing
-      connectTimeoutMs: 60000, // Increase connection timeout
-      qrTimeout: 120000, // QR timeout of 2 minutes
-      markOnlineOnConnect: false, // Try to avoid conflict issues
-      syncFullHistory: false, // Don't try to sync full message history on connect
+      printQRInTerminal: false,
+      connectTimeoutMs: 60000,
+      qrTimeout: 120000,
+      markOnlineOnConnect: false,
+      syncFullHistory: false,
     });
 
     sock.ev.on("creds.update", saveCreds);
@@ -285,7 +285,7 @@ const sendMessage = async (whatsappNumber: string, responseText: any) => {
         text: `Sending you ${Math.min(
           theResponseText.length,
           10
-        )} images. Please wait...`,
+        )} images. Please wait.`,
       });
 
       const maxImages = Math.min(theResponseText.length, 10);

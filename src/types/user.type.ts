@@ -1,4 +1,4 @@
-import { IUser, User } from "../models/user.model";
+import { IUser } from "../models/user.model";
 export interface CreateAccountInput {
   username: string;
   email: string;
