@@ -15,6 +15,11 @@ const aiApi = process.env.Gemini_Api_key;
 
 export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const { getQuestion, whatsappNumber } = req.body;
+  const idObject = req.user?._id;
+  if (!idObject) {
+    return "Uer not defined";
+  }
+  const id = `${idObject}`.split("('")[0].replace(" ", "");
 
   if (!getQuestion || getQuestion === "") {
     return res.status(400).send(badRequest("Provide Question", getQuestion));
@@ -23,7 +28,6 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
   const isChatExisted = await AiChat.find({
     userId: req.user?._id,
   });
-
   let oldHistory;
   let pdfData;
 
@@ -34,8 +38,14 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
     pdfData = isChatExisted[0];
   }
 
-  //@ts-ignore
-  trimChatHistory(req.user?._id);
+  const userAiChatHistory = oldHistory?.map((item) => {
+    return {
+      UserChat: item.user,
+      AiResponse: JSON.parse(item.aiResponse).response,
+    };
+  });
+
+  trimChatHistory(id);
 
   const now = new Date();
 
@@ -43,7 +53,7 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
 
   const fullQ = `
   You are an intelligent assistant that responds with structured JSON based on the user's message. You just need to give message format like the work of sending the reminder or sending pdf is mine
-  Use the conversation history: ${oldHistory} and ${pdfData} to help understand context if needed !!!VERY VERY IMPORTANT.
+  Use the conversation history: ${userAiChatHistory} and ${pdfData} to help understand context if needed !!!VERY VERY IMPORTANT.
 
   Current date and time is: "${currentTime}" (ISO format, accurate up to the minute)
 
@@ -163,8 +173,8 @@ export const getAnswer = asyncHandler(async (req: Request, res: Response) => {
       response = await getPdf(req, responsedObj.url);
     } else if (responsedObj.query === "7") {
       response = responsedObj.url;
-      // @ts-ignore
-      deletePdfData(req.user?._id);
+
+      deletePdfData(id);
     } else {
       response = "Unknown query type";
     }
